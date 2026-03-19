@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Battle Zone Pro</title>
+<style>
+body { margin:0; overflow:hidden; background:#0a0a0a; font-family:Arial; }
+canvas { display:block; }
+
+#menu {
+ position:absolute; width:100%; height:100%;
+ background:black; color:white;
+ display:flex; justify-content:center; align-items:center;
+ flex-direction:column;
+}
+
+button {
+ padding:10px 20px; font-size:20px;
+ background:red; color:white;
+ border:none; border-radius:10px;
+ cursor:pointer;
+}
+
+#ui {
+ position:absolute; top:10px; left:10px;
+ color:white; background:rgba(0,0,0,0.5);
+ padding:10px; border-radius:10px;
+}
+
+#healthBar { width:200px; height:20px; background:red; border-radius:10px; overflow:hidden; }
+#healthFill { height:100%; background:lime; width:100%; }
+
+#crosshair {
+ position:absolute; top:50%; left:50%;
+ width:20px; height:20px;
+ margin-left:-10px; margin-top:-10px;
+ border:2px solid white; border-radius:50%;
+ pointer-events:none;
+}
+</style>
+</head>
+<body>
+
+<div id="menu">
+<h1>🔥 BATTLE ZONE 🔥</h1>
+<button onclick="startGame()">PLAY</button>
+</div>
+
+<canvas id="gameCanvas"></canvas>
+
+<div id="ui">
+<div id="healthBar"><div id="healthFill"></div></div>
+<div id="info">Enemies: 0 | Ammo: 10</div>
+</div>
+
+<div id="crosshair"></div>
+
+<audio id="gunSound" src="https://www.soundjay.com/button/sounds/button-16.mp3"></audio>
+
+<script>
+const canvas=document.getElementById("gameCanvas");
+const ctx=canvas.getContext("2d");
+canvas.width=window.innerWidth;
+canvas.height=window.innerHeight;
+
+let gameRunning=false;
+
+let player={x:canvas.width/2,y:canvas.height/2,size:15,speed:5,health:100};
+
+let bullets=[], enemies=[];
+let zone={x:canvas.width/2,y:canvas.height/2,radius:300};
+
+let ammo=10,maxAmmo=10,reloading=false,kills=0;
+
+let keys={};
+document.addEventListener("keydown",e=>keys[e.key]=true);
+document.addEventListener("keyup",e=>keys[e.key]=false);
+
+function startGame(){
+ document.getElementById("menu").style.display="none";
+ gameRunning=true;
+ gameLoop();
+}
+
+canvas.addEventListener("click",e=>{
+ if(!gameRunning||ammo<=0)return;
+ let dx=e.clientX-player.x;
+ let dy=e.clientY-player.y;
+ let dist=Math.sqrt(dx*dx+dy*dy);
+ bullets.push({x:player.x,y:player.y,dx:dx/dist,dy:dy/dist,speed:8});
+ ammo--;
+ document.getElementById("gunSound").play();
+});
+
+document.addEventListener("keydown",e=>{
+ if(e.key==="r"&&!reloading){
+  reloading=true;
+  setTimeout(()=>{ammo=maxAmmo;reloading=false;},2000);
+ }
+ if(e.key==="Shift"){
+  player.speed=10;
+  setTimeout(()=>player.speed=5,2000);
+ }
+});
+
+setInterval(()=>{
+ if(gameRunning){
+  enemies.push({x:Math.random()*canvas.width,y:Math.random()*canvas.height,size:15,speed:2,health:50});
+ }
+},2000);
+
+function update(){
+ if(!gameRunning)return;
+
+ if(keys["w"])player.y-=player.speed;
+ if(keys["s"])player.y+=player.speed;
+ if(keys["a"])player.x-=player.speed;
+ if(keys["d"])player.x+=player.speed;
+
+ bullets.forEach((b,i)=>{
+  b.x+=b.dx*b.speed;
+  b.y+=b.dy*b.speed;
+  if(b.x<0||b.x>canvas.width||b.y<0||b.y>canvas.height)bullets.splice(i,1);
+ });
+
+ enemies.forEach((e,ei)=>{
+  let dx=player.x-e.x,dy=player.y-e.y;
+  let dist=Math.sqrt(dx*dx+dy*dy);
+  e.x+=(dx/dist)*e.speed;
+  e.y+=(dy/dist)*e.speed;
+
+  if(dist<player.size+e.size){
+   player.health-=0.3;
+   document.body.style.background="darkred";
+   setTimeout(()=>document.body.style.background="#0a0a0a",100);
+  }
+
+  bullets.forEach((b,bi)=>{
+   let d=Math.sqrt((b.x-e.x)**2+(b.y-e.y)**2);
+   if(d<e.size){
+    e.health-=25;
+    bullets.splice(bi,1);
+   }
+  });
+
+  if(e.health<=0){
+   kills++;
+   enemies.splice(ei,1);
+  }
+ });
+
+ zone.radius-=0.02;
+ let distFromCenter=Math.sqrt((player.x-zone.x)**2+(player.y-zone.y)**2);
+ if(distFromCenter>zone.radius)player.health-=0.3;
+
+ document.getElementById("healthFill").style.width=player.health+"%";
+ document.getElementById("info").innerText="Enemies:"+enemies.length+" | Ammo:"+ammo;
+
+ if(kills>=10){alert("YOU WIN!");location.reload();}
+ if(player.health<=0){document.body.innerHTML="<h1 style='color:white;text-align:center'>GAME OVER</h1>";}
+}
+
+function draw(){
+ let gradient=ctx.createRadialGradient(player.x,player.y,50,player.x,player.y,600);
+ gradient.addColorStop(0,"#1a1a1a");
+ gradient.addColorStop(1,"#000");
+ ctx.fillStyle=gradient;
+ ctx.fillRect(0,0,canvas.width,canvas.height);
+
+ ctx.strokeStyle="lime";
+ ctx.beginPath();
+ ctx.arc(zone.x,zone.y,zone.radius,0,Math.PI*2);
+ ctx.stroke();
+
+ ctx.fillStyle="cyan";
+ ctx.beginPath();
+ ctx.arc(player.x,player.y,player.size,0,Math.PI*2);
+ ctx.fill();
+
+ ctx.fillStyle="white";
+ bullets.forEach(b=>{
+  ctx.beginPath();
+  ctx.arc(b.x,b.y,3,0,Math.PI*2);
+  ctx.fill();
+ });
+
+ ctx.fillStyle="red";
+ enemies.forEach(e=>{
+  ctx.beginPath();
+  ctx.arc(e.x,e.y,e.size,0,Math.PI*2);
+  ctx.fill();
+ });
+}
+
+function gameLoop(){
+ update();
+ draw();
+ if(gameRunning)requestAnimationFrame(gameLoop);
+}
+</script>
+
+</body>
+</html>
